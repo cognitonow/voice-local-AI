@@ -1,0 +1,14 @@
+{
+  "name": "roleplay-room",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline voice roleplay with a 3D character, running entirely in the browser (WebGPU).",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "node -e \"console.log('Static app: no build step needed')\""
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {}
+}

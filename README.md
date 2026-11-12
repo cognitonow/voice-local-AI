@@ -19,6 +19,18 @@ Chatterbox shuts down before the thinking model loads, so every thinking model f
 Kokoro. Edit a line and only that line is recorded again. Tuning > Re-record scripted lines deletes a
 character's recordings so they're all made fresh at the next Start.
 
+## Running with Node (hosts and online editors)
+The project is plain files with no dependencies. `package.json` and `server.js` let any Node host run it:
+
+    npm install     (nothing to install; succeeds instantly)
+    npm start       (serves on http://localhost:8080, or the PORT the host sets)
+
+`server.js` does the same job as `serve.ps1`: the security headers the app needs, the characters listing,
+creating new characters and saving recordings. On Windows without Node, keep using Start Roleplay Room.bat.
+
+**Models are not in the repository** (about 7 GB). A hosted copy needs a `models/` folder next to the app,
+laid out as `Download models.bat` creates it, or the app will say which models are missing.
+
 ## Characters
 Every character is a folder in `characters/`:
 

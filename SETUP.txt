@@ -1,0 +1,48 @@
+Roleplay Room - clean build setup
+
+1. Make a new empty folder, e.g. C:\RoleplayRoom
+2. Put every file in it, keeping the folders exactly like this:
+
+   RoleplayRoom\
+     index.html  app.js  panel.js  metrics.js  characters.js  mood.js  river.js  engines.js  library.js  voicefiles.js  kb.js  stage.js
+     speech-worker.js  tts-worker.js  llm-worker.js  chatterbox-worker.js  mic-worklet.js  README.md
+     Start Roleplay Room.bat   Download models.bat   serve.ps1   download-models.ps1
+     characters\
+       mabel\character.md
+       mabel\voice\     (Mabel's recorded lines appear here after the first start)
+       _template\character.md   (used by + New character)
+     vendor\
+       three.module.js  three-vrm.module.min.js  web-llm.js  kokoro.web.js  chart.umd.js
+       addons\loaders\GLTFLoader.js
+       addons\utils\BufferGeometryUtils.js
+       addons\webxr\VRButton.js
+       addons\controls\OrbitControls.js
+       transformers\transformers.min.js
+       transformers\ort-wasm-simd-threaded.jsep.mjs
+       transformers\ort-wasm-simd-threaded.jsep.wasm
+       transformers4\transformers-v4.min.js         (Chatterbox - note the different name)
+       transformers4\ort-wasm-simd-threaded.mjs  .wasm  .asyncify.mjs  .asyncify.wasm   (4 files)
+       pdfjs\pdf.min.mjs
+       pdfjs\pdf.worker.min.mjs
+       mlc-libs\  (6 .wasm files)
+
+3. Remove ".txt" from these four names (File Explorer > View > Show > File name extensions):
+     Start Roleplay Room.bat.txt  ->  Start Roleplay Room.bat
+     Download models.bat.txt      ->  Download models.bat
+     serve.ps1.txt                ->  serve.ps1
+     download-models.ps1.txt      ->  download-models.ps1
+
+4. Models: either MOVE your old "models" folder into the new folder (saves re-downloading),
+   or start fresh. Then double-click Download models.bat:
+     - Enter = all six thinking models (~15 GB), or type e.g. 1,3,6
+     - Answer y to Chatterbox if you want the expressive voice (~1.5 GB)
+     - Answer y to delete old unused models
+   If huggingface.co is blocked at the office, run it at home or on a hotspot.
+
+5. Double-click Start Roleplay Room.bat, pick Mabel, a voice and a thinking model, press Start.
+   (With Chatterbox as the voice, only Ministral 3 3B can be picked: the others don't fit.)
+   Browser must use the NVIDIA card (Windows Settings > System > Display > Graphics > browser
+   > High performance) and the laptop must be plugged in.
+
+Moving or sharing: copy the whole folder. Mabel's recorded lines (characters\mabel\voice) go with it,
+so the other PC plays them without downloading Chatterbox. Pick "Recorded lines + Kokoro live".

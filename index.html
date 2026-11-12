@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roleplay Room</title>
+<style>
+  :root {
+    --petrol: #0f2a31;
+    --deep: #0a1f25;
+    --mist: #dfe8e5;
+    --mist-dim: #9fb4b1;
+    --brass: #f0b45a;
+    --sea: #8fd6c6;
+    --lilac: #b7a8e6;
+    --state: var(--sea);
+    font-family: "Avenir Next", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    color: var(--mist);
+    background: var(--petrol);
+  }
+  body[data-state="thinking"] { --state: var(--lilac); }
+  body[data-state="speaking"] { --state: var(--brass); }
+  body[data-state="loading"] { --state: var(--lilac); }
+  body[data-state="idle"] { --state: var(--mist-dim); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; }
+
+  .top {
+    position: fixed; top: 20px; left: 24px; right: 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    pointer-events: none;
+  }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  .brand small { display: block; font-weight: 400; color: var(--mist-dim); font-size: 13px; margin-top: 2px; }
+  .status {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 8px 14px 8px 12px; border-radius: 999px;
+    background: rgb(10 31 37 / 0.7); border: 1px solid rgb(223 232 229 / 0.12);
+    font-size: 14px; backdrop-filter: blur(8px);
+  }
+  .status::before {
+    content: ""; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--state); box-shadow: 0 0 0 0 var(--state);
+    transition: background .3s;
+  }
+  body[data-hearing="yes"] .status::before { animation: pulse 0.9s ease-out infinite; }
+  @keyframes pulse { to { box-shadow: 0 0 0 9px transparent; } }
+
+  .captions {
+    position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%);
+    width: min(720px, calc(100vw - 32px));
+    display: grid; gap: 10px; padding: 18px 20px 14px; border-radius: 14px;
+    background: rgb(10 31 37 / 0.72); backdrop-filter: blur(10px);
+  }
+  .captions:has(#you:empty):has(#them:empty) { opacity: 0; }
+  .line {
+    display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: baseline;
+    font-size: 17px; line-height: 1.45;
+  }
+  .line span:first-child { color: var(--mist-dim); font-size: 13px; }
+  #them { font-size: 21px; line-height: 1.4; color: #fff; text-wrap: pretty; }
+  #them:empty::after, #you:empty::after { content: "\2009"; }
+  #latency { color: var(--mist-dim); font-size: 12px; margin-left: 76px; min-height: 1em; }
+
+  .controls {
+    position: fixed; right: 20px; bottom: 20px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+  }
+  button, .filebtn {
+    font: inherit; font-size: 14px; color: var(--mist);
+    background: rgb(10 31 37 / 0.75); border: 1px solid rgb(223 232 229 / 0.18);
+    border-radius: 8px; padding: 9px 14px; cursor: pointer;
+  }
+  button:hover, .filebtn:hover { border-color: rgb(223 232 229 / 0.4); }
+  button:focus-visible, .filebtn:focus-within { outline: 2px solid var(--brass); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--brass); color: var(--deep); border-color: var(--brass); }
+  .filebtn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  #vrbutton[hidden] { display: none !important; }
+  #vrbutton { left: 20px !important; right: auto !important; bottom: 20px !important; width: auto !important; padding: 9px 14px !important;
+    font: inherit !important; font-size: 14px !important; border-radius: 8px !important; background: rgb(10 31 37 / 0.75) !important; opacity: 1 !important; }
+
+  #note {
+    position: fixed; z-index: 50; top: 72px; left: 50%; transform: translateX(-50%);
+    max-width: min(560px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 8px;
+    background: #3a2a14; color: #ffe2b3; font-size: 14px; line-height: 1.4;
+  }
+
+  #intro {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: rgb(10 31 37 / 0.9); overflow-y: auto; padding: 32px 0;
+  }
+  #intro[hidden] { display: none; }
+  .card { max-width: 420px; padding: 0 24px; }
+  .card h1 { font-size: clamp(32px, 5vw, 44px); line-height: 1.02; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 16px; }
+  .card p { color: var(--mist-dim); font-size: 16px; line-height: 1.55; margin: 0 0 28px; }
+  #start { background: var(--brass); color: var(--deep); border: 0; font-weight: 600; font-size: 16px; padding: 14px 22px; border-radius: 10px; }
+
+  @media (max-width: 640px) {
+    .captions { bottom: 132px; }
+    .line { grid-template-columns: 1fr; gap: 2px; }
+    #latency { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { body[data-hearing="yes"] .status::before { animation: none; } }
+
+  .card { max-width: 480px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 24px; display: grid; gap: 8px; }
+  legend { font-size: 14px; color: var(--mist-dim); margin-bottom: 8px; }
+    padding: 10px 12px; border-radius: 10px; border: 1px solid rgb(223 232 229 / 0.14); cursor: pointer; font-size: 15px; }
+  #loading { display: grid; gap: 12px; margin-top: 24px; }
+  #loading[hidden] { display: none; }
+  .prow { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+  .prow .size { color: var(--mist-dim); font-size: 13px; text-align: right; }
+  .prow progress { grid-column: 1 / -1; width: 100%; height: 6px; appearance: none; border: 0; border-radius: 3px; background: rgb(223 232 229 / 0.12); overflow: hidden; }
+  .prow progress::-webkit-progress-bar { background: rgb(223 232 229 / 0.12); }
+  .prow progress::-webkit-progress-value { background: var(--lilac); transition: width .3s; }
+  .prow[data-done="yes"] progress::-webkit-progress-value { background: var(--sea); }
+  .prow[data-failed="yes"] .size { color: #ffb4a8; text-align: left; grid-column: 1 / -1; grid-row: 3; }
+  .warn { color: #ffe2b3; font-size: 14px; line-height: 1.45; margin: 0 0 20px; }
+  dialog { background: var(--deep); color: var(--mist); border: 1px solid rgb(223 232 229 / 0.16); border-radius: 14px;
+    padding: 24px; width: min(520px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgb(5 15 18 / 0.6); }
+  dialog h2 { margin: 0 0 14px; font-size: 20px; font-weight: 600; }
+  dialog p { color: var(--mist-dim); font-size: 14px; line-height: 1.5; margin: 0 0 16px; }
+  dialog ul { padding-left: 18px; font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
+  dialog label { display: grid; gap: 6px; font-size: 14px; margin-bottom: 14px; }
+  dialog input[type="text"], dialog select, dialog textarea, dialog input[type="number"] {
+    font: inherit; font-size: 14px; color: var(--mist); background: rgb(223 232 229 / 0.06);
+    border: 1px solid rgb(223 232 229 / 0.18); border-radius: 8px; padding: 8px 10px; }
+  dialog textarea { min-height: 140px; resize: vertical; line-height: 1.45; }
+  .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 8px; }
+  .row .left { margin-right: auto; }
+  button.primary { background: var(--brass); color: var(--deep); border-color: var(--brass); font-weight: 600; }
+  #kb-status { min-height: 1.4em; }
+
+  #panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); z-index: 20;
+    background: rgb(10 31 37 / 0.96); border-left: 1px solid rgb(223 232 229 / 0.12); display: flex; flex-direction: column;
+    backdrop-filter: blur(12px); }
+  #panel[hidden] { display: none; }
+  body[data-panel="open"] .captions { left: calc(50% - 220px); width: min(620px, calc(100vw - 480px)); }
+  body[data-panel="open"] .controls { right: 460px; }
+  body[data-panel="open"] .top { right: 464px; }
+  .ph { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid rgb(223 232 229 / 0.1); }
+  .ph [role="tablist"] { display: flex; gap: 2px; margin-right: auto; }
+  .ph [role="tab"] { border: 0; background: none; padding: 8px 10px; color: var(--mist-dim); border-radius: 6px; }
+  .ph [role="tab"][aria-selected="true"] { color: var(--mist); background: rgb(223 232 229 / 0.08); }
+  .pbody { flex: 1; overflow-y: auto; padding: 16px; }
+  .pf { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid rgb(223 232 229 / 0.1); flex-wrap: wrap; }
+  .pf button { font-size: 13px; padding: 7px 10px; }
+  #panel h3 { font-size: 13px; font-weight: 600; color: var(--mist-dim); margin: 22px 0 8px; letter-spacing: 0.02em; }
+  .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi { padding: 10px 12px; border-radius: 10px; background: rgb(223 232 229 / 0.05); display: grid; gap: 2px; cursor: help; }
+  .kpi span { font-size: 12px; color: var(--mist-dim); }
+  .kpi strong { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kpi small { font-size: 12px; color: var(--mist-dim); font-variant-numeric: tabular-nums; }
+  .hint { font-size: 13px; line-height: 1.5; margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: rgb(240 180 90 / 0.1); }
+  .chart { position: relative; height: 200px; }
+  .meter { position: relative; height: 10px; border-radius: 5px; background: rgb(223 232 229 / 0.1); overflow: hidden; }
+  #mic-bar { height: 100%; width: 0; background: var(--mist-dim); transition: width .05s; }
+  #mic-bar.hot { background: var(--sea); }
+  #mic-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--brass); }
+  .small { font-size: 12px; color: var(--mist-dim); margin: 6px 0 0; }
+  #device { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin: 0; }
+  #device dt { color: var(--mist-dim); }
+  #device dd { margin: 0; overflow-wrap: anywhere; }
+  #transcript { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  #transcript li { padding: 12px; border-radius: 10px; background: rgb(223 232 229 / 0.05); font-size: 14px; line-height: 1.5; }
+  #transcript header { display: flex; gap: 8px; color: var(--mist-dim); font-size: 12px; }
+  #transcript p { margin: 6px 0 0; }
+  #transcript b { color: var(--mist-dim); font-weight: 500; margin-right: 4px; }
+  #transcript .meta { font-size: 12px; color: var(--mist-dim); }
+  #transcript .filler { font-size: 13px; color: var(--lilac); }
+  #transcript .cut { text-decoration: line-through; opacity: 0.55; }
+  #transcript .tag { font-size: 12px; color: #ffb4a8; }
+  .inline { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 10px; }
+  .inline select, #tuning select { font: inherit; font-size: 13px; color: var(--mist); background: rgb(223 232 229 / 0.06); border: 1px solid rgb(223 232 229 / 0.18); border-radius: 6px; padding: 6px 8px; }
+  #log { font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #log .ev { padding: 1px 0; border-bottom: 1px solid rgb(223 232 229 / 0.04); }
+  #log .bad { color: #ffb4a8; }
+  #log .warn { color: #ffe2b3; }
+  #tuning label { display: grid; gap: 6px; font-size: 14px; margin-bottom: 18px; }
+  #tuning label output { color: var(--brass); font-variant-numeric: tabular-nums; }
+  #tuning label.check { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  #tuning small { font-size: 12px; color: var(--mist-dim); line-height: 1.4; }
+  #tuning input[type="range"] { accent-color: var(--brass); }
+  #tuning input[type="text"], #tuning input[type="password"] { font: inherit; font-size: 13px; color: var(--mist);
+    background: rgb(223 232 229 / 0.06); border: 1px solid rgb(223 232 229 / 0.18); border-radius: 6px; padding: 7px 9px; }
+  #tuning h3 { margin-top: 8px; }
+  #tuning label > * { min-width: 0; max-width: 100%; }
+  #tuning input:disabled { opacity: 0.4; }
+  @media (max-width: 900px) {
+    body[data-panel="open"] .captions, body[data-panel="open"] .controls, body[data-panel="open"] .top { display: none; }
+  }
+
+  .who { display: grid; gap: 6px; font-size: 14px; color: var(--mist-dim); margin: 0 0 20px; }
+  .who select { font: inherit; font-size: 15px; color: var(--mist); background: rgb(223 232 229 / 0.06);
+    border: 1px solid rgb(223 232 229 / 0.18); border-radius: 8px; padding: 10px 12px; }
+  #scene-card { position: fixed; z-index: 30; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(520px, calc(100vw - 32px)); padding: 28px 28px 24px; border-radius: 16px;
+    background: rgb(10 31 37 / 0.94); border: 1px solid rgb(240 180 90 / 0.35); backdrop-filter: blur(12px);
+    box-shadow: 0 20px 60px rgb(0 0 0 / 0.45); }
+  #scene-card[hidden] { display: none; }
+  #scene-card small { color: var(--brass); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+  #scene-card h2 { margin: 6px 0 12px; font-size: 28px; line-height: 1.1; font-weight: 600; }
+  #scene-card p { margin: 0 0 12px; font-size: 16px; line-height: 1.55; color: var(--mist); }
+  #scene-card .goal { color: var(--mist-dim); font-size: 14px; border-left: 2px solid var(--brass); padding-left: 10px; }
+  #scene-go { margin-top: 8px; background: var(--brass); color: var(--deep); border: 0; font-weight: 600; padding: 11px 20px; border-radius: 10px; }
+  .lineup { display: grid; gap: 6px; margin: 0 0 24px; padding: 12px 14px; border-radius: 10px; border: 1px solid rgb(223 232 229 / 0.14); }
+  .lineup div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+  .lineup span { color: var(--mist-dim); }
+  .lineup b { font-weight: 600; }
+  .lineup select { font: inherit; font-size: 14px; font-weight: 600; color: var(--mist); background: transparent; border: 1px solid rgb(223 232 229 / 0.18); border-radius: 6px; padding: 2px 6px; }
+  .choice[data-missing="big"] { opacity: 0.45; cursor: not-allowed; }
+  .choice[data-missing="big"] > small:last-child::after { content: " (too big with Chatterbox)"; }
+  fieldset { border: 0; padding: 0; margin: 0 0 24px; display: grid; gap: 8px; }
+  legend { font-size: 14px; color: var(--mist-dim); margin-bottom: 8px; }
+  #thinking-list { display: grid; gap: 8px; }
+  .choice { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: baseline;
+    padding: 10px 12px; border-radius: 10px; border: 1px solid rgb(223 232 229 / 0.14); cursor: pointer; font-size: 15px; }
+  .choice:has(input:checked) { border-color: var(--brass); background: rgb(240 180 90 / 0.08); }
+  .choice small { color: var(--mist-dim); font-size: 13px; }
+  .choice input { accent-color: var(--brass); }
+  .choice[data-missing="yes"] { opacity: 0.45; cursor: not-allowed; }
+  .choice[data-missing="yes"] > small:last-child::after { content: " (not downloaded)"; }
+  #transcript .mood { font-size: 12px; color: var(--mist-dim); border-left: 2px solid var(--brass); padding-left: 8px; }
+  #transcript .mood strong { color: var(--mist); font-weight: 600; }
+  #scene-hud { position: fixed; top: 76px; left: 24px; z-index: 5; display: grid; grid-template-columns: auto 18px auto; gap: 8px; align-items: stretch;
+    padding: 10px 12px; border-radius: 12px; background: rgb(10 31 37 / 0.78); border: 1px solid rgb(223 232 229 / 0.12); backdrop-filter: blur(8px); font-size: 13px; }
+  #scene-hud[hidden] { display: none; }
+  #scene-hud .bank { display: grid; gap: 2px; min-width: 96px; padding: 6px 8px; border-radius: 8px; }
+  #scene-hud .bank span { color: var(--mist-dim); font-size: 12px; }
+  #scene-hud .bank b { font-weight: 600; }
+  #scene-hud .bank.boat { background: rgb(240 180 90 / 0.12); outline: 1px solid rgb(240 180 90 / 0.5); }
+  #scene-hud .water { border-radius: 4px; background: repeating-linear-gradient(180deg, rgb(95 168 211 / 0.5) 0 4px, rgb(95 168 211 / 0.2) 4px 8px); }
+  #scene-hud p { grid-column: 1 / -1; margin: 4px 0 0; color: var(--sea); font-weight: 600; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .who > span { display: block; font-size: 14px; color: var(--mist-dim); margin-bottom: 8px; }
+  .library .lib-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--mist-dim); margin-bottom: 8px; }
+  .library .lib-head button { font: inherit; font-size: 13px; color: var(--mist); background: transparent; border: 1px solid rgb(223 232 229 / 0.18); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  .library .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; max-height: 340px; overflow-y: auto; padding: 2px; }
+  .library .card { position: relative; display: grid; gap: 4px; align-content: start; padding: 12px 12px 10px; border-radius: 12px; border: 1px solid rgb(223 232 229 / 0.14); background: rgb(14 38 45 / 0.94); cursor: pointer; text-align: left; }
+  .library .card:hover { border-color: rgb(223 232 229 / 0.3); }
+  .library .card:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  .library .card.on { border-color: var(--brass); background: rgb(240 180 90 / 0.08); }
+  .library .card b { font-size: 16px; font-weight: 600; }
+  .library .card .sub { font-size: 13px; color: var(--mist-dim); }
+  .library .card p { margin: 2px 0 0; font-size: 13px; line-height: 1.4; color: var(--mist-dim); }
+  .library .card.add { border-style: dashed; align-content: center; min-height: 92px; }
+  .library .card.broken { opacity: 0.6; cursor: default; }
+  .library .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .library .badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: rgb(223 232 229 / 0.08); color: var(--mist); }
+  .library .badge.ok { background: rgb(143 214 198 / 0.16); color: var(--sea); }
+  .library .badge.warn { background: rgb(240 180 90 / 0.14); color: var(--brass); }
+  .library .details { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; color: var(--mist-dim); background: transparent; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .library .details:hover { color: var(--mist); background: rgb(223 232 229 / 0.08); }
+  dialog.sheet { max-width: 560px; width: calc(100% - 32px); max-height: 86vh; overflow: auto; color: var(--mist); background: #0f2a31; border: 1px solid rgb(223 232 229 / 0.16); border-radius: 14px; padding: 20px 22px; }
+  dialog.sheet::backdrop { background: rgb(5 15 18 / 0.6); }
+  dialog.sheet h2 { margin: 0 0 4px; font-size: 20px; } dialog.sheet h3 { margin: 18px 0 6px; font-size: 14px; color: var(--mist-dim); font-weight: 600; }
+  dialog.sheet .dim { color: var(--mist-dim); font-size: 13px; }
+  dialog.sheet .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 13px; }
+  dialog.sheet .facts div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid rgb(223 232 229 / 0.06); padding: 3px 0; }
+  dialog.sheet .facts span { color: var(--mist-dim); }
+  dialog.sheet table { width: 100%; border-collapse: collapse; font-size: 13px; } dialog.sheet td { padding: 3px 6px 3px 0; vertical-align: top; }
+  dialog.sheet ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--brass); }
+  dialog.sheet label { display: grid; gap: 6px; margin: 14px 0 0; font-size: 14px; }
+  dialog.sheet input { font: inherit; color: var(--mist); background: rgb(223 232 229 / 0.06); border: 1px solid rgb(223 232 229 / 0.2); border-radius: 8px; padding: 8px 10px; }
+  dialog.sheet .msg { min-height: 1.2em; font-size: 13px; color: var(--brass); }
+  dialog.sheet menu { display: flex; justify-content: flex-end; gap: 8px; margin: 16px 0 0; padding: 0; }
+  dialog.sheet menu button { font: inherit; font-size: 14px; color: var(--mist); background: transparent; border: 1px solid rgb(223 232 229 / 0.2); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  dialog.sheet menu button.primary { background: var(--brass); color: #10262c; border-color: var(--brass); font-weight: 600; }
+  .scope { font-size: 13px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: rgb(223 232 229 / 0.05); color: var(--mist-dim); margin: 0 0 12px; }
+  .scope b { color: var(--mist); }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/": "./vendor/addons/",
+  "@pixiv/three-vrm": "./vendor/three-vrm.module.min.js"
+} }
+</script>
+<script>
+  // Show load failures on screen (e.g. a blocked CDN) instead of failing silently.
+  function showNote(msg) {
+    const n = document.getElementById('note');
+    if (n) { n.textContent = msg; n.hidden = false; }
+  }
+  window.addEventListener('error', (e) => {
+    const src = e.target && (e.target.src || e.target.href);
+    if (src) showNote(`Couldn't load ${src}. Make sure the whole folder was extracted.`);
+  }, true);
+  if (location.protocol === 'file:') {
+    document.addEventListener('DOMContentLoaded', () => showNote('Opened as a file, so the browser blocks it. Close this tab and double-click "Start Roleplay Room.bat" in the same folder instead.'));
+  } else setTimeout(() => {
+    if (!window.__roleplayReady) showNote("The app didn't finish loading. Open the browser console (F12) and send me the red errors.");
+  }, 10000);
+  // Earlier versions used a service worker; remove it so it can't serve stale files.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+</script>
+</head>
+<body data-state="idle">
+<div id="stage"></div>
+
+<div class="top">
+  <div class="brand">Roleplay Room<small>Runs in your browser, entirely from this folder</small></div>
+  <div class="status" role="status" aria-live="polite" id="status">Ready</div>
+</div>
+
+<p id="note" hidden></p>
+<div id="scene-hud" hidden aria-live="polite"></div>
+<dialog id="profile-dialog" class="sheet"><form method="dialog"><div class="body"></div><menu><button value="close">Close</button></menu></form></dialog>
+<dialog id="new-char-dialog" class="sheet"><form>
+  <h2>New character</h2>
+  <p class="dim">Creates <b>characters\&lt;name&gt;\character.md</b> from the template. You then write the character in Notepad and press Reload characters.</p>
+  <label>Name <input name="name" autocomplete="off" placeholder="e.g. Captain Reyes" required></label>
+  <p class="msg" role="status"></p>
+  <menu><button value="cancel" formnovalidate>Cancel</button><button value="create" class="primary">Create</button></menu>
+</form></dialog>
+
+<section class="captions" aria-live="polite">
+  <div class="line"><span>You</span><span id="you"></span></div>
+  <div class="line"><span id="them-name">Avatar</span><span id="them"></span></div>
+  <div id="latency"></div>
+</section>
+
+<div class="controls">
+  <button id="stop" title="Stop the avatar talking (Esc)">Stop</button>
+  <button id="mute" aria-pressed="false">Mute mic</button>
+  <button id="reset" title="Restart from the character's opening line">Restart scene</button>
+  <button id="kb-open">Knowledge</button>
+  <button id="settings-open">Character</button>
+  <button id="stats-open" aria-pressed="false">Stats</button>
+  <label class="filebtn">Load avatar (.vrm)<input id="vrmfile" type="file" accept=".vrm"></label>
+</div>
+
+<div id="scene-card" hidden role="dialog" aria-live="polite">
+  <small>Scene</small>
+  <h2 id="scene-title"></h2>
+  <p id="scene-setup"></p>
+  <p id="scene-goal" class="goal"></p>
+  <button id="scene-go">Begin</button>
+</div>
+
+<div id="intro">
+  <div class="card">
+    <h1>Talk it through, out loud.</h1>
+    <p>Everything runs on this device from the models in this folder. No internet needed.</p>
+    <p class="warn" id="gpu-note" hidden>This browser doesn't support WebGPU. Open this page in a recent Chrome or Edge on a desktop or laptop.</p>
+    <div class="who"><span>Who are you talking to?</span>
+      <select id="intro-character" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+      <div id="library" class="library" aria-label="Characters"></div>
+    </div>
+    <div class="lineup">
+      <div><span>Listening</span><b>Whisper large-v3-turbo</b></div>
+      <div><span>Voice</span><select id="voice-choice" aria-label="Voice engine">
+        <option value="character">Character's choice</option>
+        <option value="kokoro">Kokoro (fast)</option>
+        <option value="chatterbox">Chatterbox lines + Kokoro live</option>
+      </select></div>
+    </div>
+    <fieldset>
+      <legend>Thinking model (all fit on 8 GB at full speed)</legend>
+      <div id="thinking-list"></div>
+    </fieldset>
+    <button id="start">Start conversation</button>
+    <p style="font-size:14px;margin:10px 0 0">The first start takes a minute while the models load into the browser; later starts are faster.</p>
+    <div id="loading" hidden aria-live="polite">
+      <div class="prow" id="p-brain"><span>Thinking model</span><span class="size">Waiting</span><progress max="1" value="0"></progress></div>
+      <div class="prow" id="p-ears"><span>Listening model</span><span class="size">Waiting</span><progress max="1" value="0"></progress></div>
+      <div class="prow" id="p-voice"><span>Voice</span><span class="size">Waiting</span><progress max="1" value="0"></progress></div>
+    </div>
+  </div>
+</div>
+
+
+<aside id="panel" hidden aria-label="Stats and tuning">
+  <header class="ph">
+    <div role="tablist">
+      <button role="tab" data-tab="live" aria-selected="true">Live</button>
+      <button role="tab" data-tab="transcript" aria-selected="false">Transcript</button>
+      <button role="tab" data-tab="log" aria-selected="false">Log</button>
+      <button role="tab" data-tab="tuning" aria-selected="false">Tuning</button>
+    </div>
+    <button id="panel-close" aria-label="Close stats">Close</button>
+  </header>
+  <div class="pbody">
+    <section data-pane="live">
+      <div id="kpis" class="kpis"></div>
+      <p id="bottleneck" class="hint"></p>
+      <h3>Where the wait goes, per turn</h3>
+      <div class="chart"><canvas id="c-wait"></canvas></div>
+      <h3>Speed per turn</h3>
+      <div class="chart"><canvas id="c-speed"></canvas></div>
+      <div id="mood-wrap" hidden>
+        <h3>Mood over the scene</h3>
+        <div class="chart"><canvas id="c-mood"></canvas></div>
+      </div>
+      <h3>Microphone</h3>
+      <div class="meter"><div id="mic-bar"></div><div id="mic-mark" title="Speech threshold"></div></div>
+      <p class="small"><span id="mic-readout">-</span>. The line is the level your voice must cross to be heard; adjust it under Tuning.</p>
+      <p id="mic-diag" class="hint" hidden></p>
+      <h3>Running on</h3>
+      <dl id="device"></dl>
+    </section>
+    <section data-pane="transcript" hidden>
+      <ol id="transcript"></ol>
+    </section>
+    <section data-pane="log" hidden>
+      <label class="inline">Show
+        <select id="log-filter">
+          <option value="pipeline">Pipeline events</option>
+          <option value="problems">Problems only</option>
+          <option value="all">Everything</option>
+        </select>
+      </label>
+      <div id="log" role="log"></div>
+    </section>
+    <section data-pane="tuning" hidden>
+      <form id="tuning" onsubmit="return false">
+        <p id="tuning-scope" class="scope"></p>
+        <label>Mic mode
+          <select name="micMode">
+            <option value="auto">Auto (adapt to room noise)</option>
+            <option value="manual">Manual (set sensitivity below)</option>
+          </select>
+          <small>Watch the Microphone meter on the Live tab while you set this.</small></label>
+        <label>Mic sensitivity <output data-out="micSensitivity"></output>
+          <input type="range" name="micSensitivity" min="0" max="100" step="1">
+          <small>Higher picks up quieter speech. Too high and background noise counts as talking, so it never hears you stop.</small></label>
+        <label class="check"><input type="checkbox" name="backchannel"> Acknowledge while I'm still talking (nod + quiet "mm-hm")</label>
+        <label class="check"><input type="checkbox" name="idleNudge"> Character speaks up if I go quiet</label>
+        <label>End-of-turn pause <output data-out="silenceMs"></output>
+          <input type="range" name="silenceMs" min="300" max="1500" step="50">
+          <small>How long you must pause before it answers. Lower is faster but may cut you off.</small></label>
+        <label class="check"><input type="checkbox" name="useFiller"> Cover slow answers with a filler</label>
+        <label>Play filler if the answer isn't ready after <output data-out="fillerMs"></output>
+          <input type="range" name="fillerMs" min="0" max="2000" step="100">
+          <small>Counted from when your speech has been transcribed.</small></label>
+        <label>Microphone while the avatar talks
+          <select name="micWhileTalking">
+            <option value="wait">Wait until it finishes (recommended)</option>
+            <option value="interrupt">Let me interrupt by talking</option>
+          </select>
+          <small>If the mic hears the avatar through your speakers, it interrupts itself. "Wait" stops that; use Stop or Esc to cut in. Headphones let you use "interrupt" cleanly.</small></label>
+        <label>How loud you need to be to interrupt <output data-out="bargeLevel"></output>
+          <input type="range" name="bargeLevel" min="1.3" max="4" step="0.1">
+          <small>Only used when interrupting by voice is on.</small></label>
+        <label>Longest reply <output data-out="maxTokens"></output>
+          <input type="range" name="maxTokens" min="60" max="400" step="20"></label>
+        <label>Knowledge sections per answer <output data-out="kbTopK"></output>
+          <input type="range" name="kbTopK" min="0" max="8" step="1">
+          <small>More sections give better grounded answers but a longer prompt, so slower thinking.</small></label>
+        <label class="check"><input type="checkbox" name="earlyChunk"> Start speaking at the first comma</label>
+        <h3>Voice</h3>
+        <label class="check"><input type="checkbox" name="emotionSpeed"> Faster on excited lines, slower on hesitant ones</label>
+        <label>Speech detection
+          <select name="vad"><option value="silero">Silero (tells voices from noise)</option><option value="level">Loudness only (older)</option></select>
+          <small>Silero ignores typing, air-con and background chatter. Applies at the next Start.</small></label>
+        <label>Kokoro runs on
+          <select name="voiceDevice"><option value="gpu">Graphics card</option><option value="cpu">Processor (frees graphics memory)</option></select>
+          <small>Compare "Voice speed" in Live: above 1x is fine. Applies at the next Start.</small></label>
+        <label class="check"><input type="checkbox" name="showHud"> Show the puzzle state on screen (river banks)</label>
+        <button type="button" id="rerecord">Re-record scripted lines</button>
+        <small class="small">With Chatterbox, scripted lines are recorded once and kept. Re-record after changing the voice or expressiveness; it happens at the next Start.</small>
+        <label>Expressiveness (Chatterbox) <output data-out="expressiveness"></output>
+          <input type="range" name="expressiveness" min="0" max="1.5" step="0.1">
+          <small>0 flat, 0.5 natural, 1.5 very dramatic. The character's stress adds or takes away up to 0.2.</small></label>
+        <button type="button" id="tuning-defaults">Restore defaults</button>
+      </form>
+    </section>
+  </div>
+  <footer class="pf">
+    <button id="export-json">Export log (JSON)</button>
+    <button id="export-csv">Export turns (CSV)</button>
+    <button id="clear-stats">Clear</button>
+  </footer>
+</aside>
+
+<dialog id="kb-dialog">
+  <h2>Knowledge</h2>
+  <p>Add documents the character should draw on. They're read and stored in this browser only.</p>
+  <ul id="kb-list"></ul>
+  <label class="filebtn" style="display:inline-block">Add files (txt, md, pdf)<input id="kb-files" type="file" accept=".txt,.md,.pdf" multiple></label>
+  <p id="kb-status" aria-live="polite"></p>
+  <form method="dialog" class="row">
+    <button type="button" id="kb-clear" class="left" hidden>Remove all knowledge</button>
+    <button value="close">Done</button>
+  </form>
+</dialog>
+
+<dialog id="settings-dialog">
+  <h2>Character</h2>
+  <form method="dialog" id="settings-form">
+    <label>Character<select name="preset" id="char-preset"></select>
+      <small>Characters come from the <code>characters</code> folder. Pick Custom to write one here instead.</small></label>
+    <p id="char-file-note" class="hint" hidden>Loaded from <b id="char-file-name"></b>. Edit that file in Notepad, save, then press Reload characters.</p>
+    <label>Name<input type="text" name="name" maxlength="40"></label>
+    <label>Voice
+      <select name="voice">
+        <option value="af_heart">Heart (US, female)</option>
+        <option value="af_bella">Bella (US, female)</option>
+        <option value="af_nicole">Nicole (US, female)</option>
+        <option value="am_michael">Michael (US, male)</option>
+        <option value="am_fenrir">Fenrir (US, male)</option>
+        <option value="bf_emma">Emma (UK, female)</option>
+        <option value="bm_george">George (UK, male)</option>
+      </select>
+    </label>
+    <label>Speaking speed<input type="number" name="speed" min="0.7" max="1.4" step="0.05"></label>
+    <label>Instructions<textarea name="prompt"></textarea></label>
+    <div class="row">
+      <button type="button" id="settings-defaults" class="left">Restore defaults</button>
+      <button type="button" id="char-reload">Reload characters</button>
+      <button value="cancel">Cancel</button>
+      <button value="save" class="primary">Save character</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="./vendor/chart.umd.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
